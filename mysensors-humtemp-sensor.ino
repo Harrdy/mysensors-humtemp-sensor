@@ -19,11 +19,13 @@ boolean metric = true;
 int BATTERY_SENSE_PIN = A0;
 int batteryPcnt = 0;
 int batLoop = 0;
-int batArray[3];
+#define BATTERY_SIZE 3
+int batArray[BATTERY_SIZE];
 
-boolean enable_skip_counter = true;
 int temp_skip_counter = 0;
 int hum_skip_counter = 0;
+
+int skip_counter_limit = 1;
 
 
 MyMessage msgHum(CHILD_ID_HUM, V_HUM);
@@ -38,7 +40,7 @@ void setup()
   dht.setup(HUMIDITY_SENSOR_DIGITAL_PIN);
 
   // Send the Sketch Version Information to the Gateway
-  gw.sendSketchInfo("Temperature & Humidity", "1.0");
+  gw.sendSketchInfo("Temperature & Humidity", "1.1");
 
   // Register all sensors to gw (they will be created as child devices)
   gw.present(CHILD_ID_HUM, S_HUM);
@@ -55,7 +57,7 @@ void loop()
   float temperature = dht.getTemperature();
   if (isnan(temperature)) {
     Serial.println("Failed reading temperature from DHT");
-  } else if (lastTemp != temperature || temp_skip_counter >= 1) {
+  } else if (lastTemp != temperature || temp_skip_counter > skip_counter_limit) {
     lastTemp = temperature;
     temp_skip_counter = 0;
     if (!metric) {
@@ -73,7 +75,7 @@ void loop()
   float humidity = dht.getHumidity();
   if (isnan(humidity)) {
     Serial.println("Failed reading humidity from DHT");
-  } else if (humidity != lastHum || hum_skip_counter >= 1) {
+  } else if (humidity != lastHum || hum_skip_counter > skip_counter_limit) {
     lastHum = humidity;
     hum_skip_counter = 0;
     gw.send(msgHum.set(humidity, 1));
@@ -91,13 +93,21 @@ void loop()
   Serial.print("Battery percent: "); Serial.print(batteryPcnt); Serial.println(" %");
 #endif
   batArray[batLoop] = batteryPcnt;
-
-  if (batLoop > 2) {
-
-    batteryPcnt = (batArray[0] + batArray[1] + batArray[2] + batArray[3]);
-    batteryPcnt = batteryPcnt / 4;
+  
+  int batteryPcntBuf = 0;
+  if (batLoop > BATTERY_SIZE-1) {
+    for (int x=0; x <= BATTERY_SIZE; x++)
+    {
+      batteryPcntBuf += batArray[x];
+    }
+    
+    batteryPcnt = batteryPcntBuf / (BATTERY_SIZE + 1);
 #ifdef DEBUG
-    Serial.print("Battery percent (Avg (4):) "); Serial.print(batteryPcnt); Serial.println(" %");
+    Serial.print("Battery percent (Avg (");
+    Serial.print(BATTERY_SIZE+1);
+    Serial.print("):) ");
+    Serial.print(batteryPcnt);
+    Serial.println(" %");
 #endif
 
     if (batteryPcnt > 100)
